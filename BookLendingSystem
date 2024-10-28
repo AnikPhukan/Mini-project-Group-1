@@ -1,0 +1,276 @@
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.*;
+import java.util.ArrayList;
+import javax.swing.border.TitledBorder;
+
+public class BookLendingSystem extends JFrame {
+    private ArrayList<Book> books;
+    private DefaultListModel<String> bookListModel;
+    private JList<String> bookList;
+    private JTextField titleField, priceField, borrowerField, addedByField;
+    private JLabel statusLabel;
+    private JButton payButton;
+    private double lendingFee;
+
+    public BookLendingSystem() {
+        books = new ArrayList<>();
+        bookListModel = new DefaultListModel<>();
+
+        setTitle("Book Lending System");
+        setSize(800, 500);
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setLayout(new BorderLayout());
+
+        // Main panel with padding
+        JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
+        mainPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+
+        // Input Panel
+        JPanel inputPanel = new JPanel(new GridBagLayout());
+        inputPanel.setBorder(BorderFactory.createTitledBorder(
+            BorderFactory.createEtchedBorder(), "Book Details",
+            TitledBorder.LEFT, TitledBorder.TOP));
+
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.insets = new Insets(5, 5, 5, 5);
+
+        // Add Book Section
+        gbc.gridx = 0; gbc.gridy = 0;
+        inputPanel.add(new JLabel("Book Title:"), gbc);
+        gbc.gridx = 1;
+        titleField = new JTextField(20);
+        inputPanel.add(titleField, gbc);
+
+        gbc.gridx = 0; gbc.gridy = 1;
+        inputPanel.add(new JLabel("Price (₹):"), gbc);
+        gbc.gridx = 1;
+        priceField = new JTextField(20);
+        inputPanel.add(priceField, gbc);
+
+        gbc.gridx = 0; gbc.gridy = 2;
+        inputPanel.add(new JLabel("Added By:"), gbc);
+        gbc.gridx = 1;
+        addedByField = new JTextField(20);
+        inputPanel.add(addedByField, gbc);
+
+        // Lending Section
+        gbc.gridx = 0; gbc.gridy = 3;
+        inputPanel.add(new JLabel("Borrower Name:"), gbc);
+        gbc.gridx = 1;
+        borrowerField = new JTextField(20);
+        inputPanel.add(borrowerField, gbc);
+
+        // Buttons Panel
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 0));
+        JButton addButton = new JButton("Add Book");
+        JButton lendButton = new JButton("Lend Book");
+        payButton = new JButton("Pay");  // New Pay button
+        payButton.setEnabled(false);     // Initially disabled
+        buttonPanel.add(addButton);
+        buttonPanel.add(lendButton);
+        buttonPanel.add(payButton);      // Add Pay button to panel
+
+        gbc.gridx = 0; gbc.gridy = 4;
+        gbc.gridwidth = 2;
+        inputPanel.add(buttonPanel, gbc);
+
+        // Book List with border
+        bookList = new JList<>(bookListModel);
+        bookList.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        JScrollPane scrollPane = new JScrollPane(bookList);
+        scrollPane.setBorder(BorderFactory.createTitledBorder(
+            BorderFactory.createEtchedBorder(), "Book List",
+            TitledBorder.LEFT, TitledBorder.TOP));
+
+        // Status Label
+        statusLabel = new JLabel("Status: Ready");
+        statusLabel.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
+        statusLabel.setFont(new Font("SansSerif", Font.BOLD, 12));
+
+        // Add components to main panel
+        mainPanel.add(inputPanel, BorderLayout.NORTH);
+        mainPanel.add(scrollPane, BorderLayout.CENTER);
+        mainPanel.add(statusLabel, BorderLayout.SOUTH);
+
+        // Add main panel to frame
+        add(mainPanel);
+
+        // Add Button Action
+        addButton.addActionListener(e -> addBook());
+
+        // Lend Button Action
+        lendButton.addActionListener(e -> lendBook());
+
+        // Pay Button Action
+        payButton.addActionListener(e -> confirmPayment()); // Add payment confirmation
+
+        // Double-click listener for book details
+        bookList.addMouseListener(new MouseAdapter() {
+            public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() == 2) {
+                    showBookDetails();
+                }
+            }
+        });
+    }
+
+    private void addBook() {
+        try {
+            String title = titleField.getText().trim();
+            String priceText = priceField.getText().trim();
+            String addedBy = addedByField.getText().trim();
+
+            if (title.isEmpty() || priceText.isEmpty() || addedBy.isEmpty()) {
+                showError("Please fill in all fields (Title, Price, and Added By)");
+                return;
+            }
+
+            double price = Double.parseDouble(priceText);
+
+            if (price <= 0) {
+                showError("Price must be greater than 0");
+                return;
+            }
+
+            Book book = new Book(title, price, addedBy);
+            books.add(book);
+            bookListModel.addElement(String.format("%-30s ₹%-10.2f Added by: %-20s (Available)", 
+                truncateString(title, 30), 
+                price,
+                truncateString(addedBy, 20)));
+                
+            clearFields();
+            statusLabel.setText("Status: Book added successfully");
+        } catch (NumberFormatException ex) {
+            showError("Please enter a valid price");
+        }
+    }
+
+    private void lendBook() {
+        int selectedIndex = bookList.getSelectedIndex();
+        if (selectedIndex == -1) {
+            showError("Please select a book to lend");
+            return;
+        }
+
+        Book selectedBook = books.get(selectedIndex);
+        if (selectedBook.getStatus().equals("Borrowed")) {
+            showError("This book is already borrowed");
+            return;
+        }
+
+        String borrower = borrowerField.getText().trim();
+
+        if (borrower.isEmpty()) {
+            showError("Please enter the borrower's name");
+            return;
+        }
+
+        selectedBook.setBorrower(borrower);
+        selectedBook.setStatus("Borrowed");
+
+        // Calculate 30% of the book price as lending fee
+        lendingFee = selectedBook.getPrice() * 0.05;
+
+        bookListModel.setElementAt(
+            String.format("%-5s ₹%-10.2f Borrowed by: %-15s", 
+                truncateString(selectedBook.getTitle(), 5),
+                selectedBook.getPrice(),
+                truncateString(borrower, 15)),
+            selectedIndex
+        );
+
+        // Enable the Pay button after lending the book
+        payButton.setEnabled(true);
+
+        // Display the lending fee to the user
+        JOptionPane.showMessageDialog(
+            this,
+            String.format("Lending fee (5%% of ₹%.2f): ₹%.2f", selectedBook.getPrice(), lendingFee),
+            "Lending Fee",
+            JOptionPane.INFORMATION_MESSAGE
+        );
+
+        clearFields();
+        statusLabel.setText("Status: Book lent successfully");
+    }
+
+    private void confirmPayment() {
+        // Disable the Pay button after payment is confirmed
+        payButton.setEnabled(false);
+
+        // Show confirmation dialog for payment
+        JOptionPane.showMessageDialog(
+            this,
+            String.format("Payment of ₹%.2f confirmed!", lendingFee),
+            "Payment Confirmed",
+            JOptionPane.INFORMATION_MESSAGE
+        );
+
+        // Update status to show that payment has been made
+        statusLabel.setText("Status: Payment of ₹" + lendingFee + " confirmed.");
+    }
+
+    private void showBookDetails() {
+        int selectedIndex = bookList.getSelectedIndex();
+        if (selectedIndex != -1) {
+            Book book = books.get(selectedIndex);
+            String details = String.format(
+                "Title: %s\n" +
+                "Price: ₹%.2f\n" +
+                "Added By: %s\n" +
+                "Status: %s\n" +
+                "Borrower: %s",
+                book.getTitle(),
+                book.getPrice(),
+                book.getAddedBy(),
+                book.getStatus(),
+                book.getBorrower() != null ? book.getBorrower() : "N/A"
+            );
+            
+            JOptionPane.showMessageDialog(
+                this,
+                details,
+                "Book Details",
+                JOptionPane.INFORMATION_MESSAGE
+            );
+        }
+    }
+
+    private String truncateString(String str, int length) {
+        if (str == null) return "";
+        return str.length() > length ? str.substring(0, length - 3) + "..." : str;
+    }
+
+    private void clearFields() {
+        titleField.setText("");
+        priceField.setText("");
+        addedByField.setText("");
+        borrowerField.setText("");
+    }
+
+    private void showError(String message) {
+        JOptionPane.showMessageDialog(
+            this,
+            message,
+            "Error",
+            JOptionPane.ERROR_MESSAGE
+        );
+    }
+
+    public static void main(String[] args) {
+        try {
+            // Set system look and feel
+            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        SwingUtilities.invokeLater(() -> {
+            BookLendingSystem system = new BookLendingSystem();
+            system.setVisible(true);
+        });
+    }
+}
